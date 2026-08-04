@@ -17,6 +17,7 @@ SKIP_SYNC="${SKIP_SYNC:-0}"
 FORCE_BUILD="${FORCE_BUILD:-0}"
 PUSH_ORIGIN="${PUSH_ORIGIN:-1}"
 RELAUNCH="${RELAUNCH:-1}"
+RESET_TCC="${RESET_TCC:-1}"
 
 log() { printf '[auto-update] %s\n' "$*"; }
 die() { printf '[auto-update] ERROR: %s\n' "$*" >&2; exit 1; }
@@ -152,6 +153,20 @@ build_and_install() {
   log "Installed app signature:"
   codesign -dv --verbose=2 "$INSTALL_PATH" 2>&1 || true
 
+  if [[ "$RESET_TCC" == "1" ]]; then
+    log "Resetting TCC entries so Accessibility can be re-granted for the new ad-hoc signature..."
+    # Ad-hoc reinstalls change code identity; stale TCC rows block the Accessibility toggle.
+    tccutil reset Accessibility "$APP_BUNDLE_ID" 2>/dev/null || true
+    tccutil reset Microphone "$APP_BUNDLE_ID" 2>/dev/null || true
+    tccutil reset ScreenCapture "$APP_BUNDLE_ID" 2>/dev/null || true
+    tccutil reset AppleEvents "$APP_BUNDLE_ID" 2>/dev/null || true
+    tccutil reset ListenEvent "$APP_BUNDLE_ID" 2>/dev/null || true
+    tccutil reset PostEvent "$APP_BUNDLE_ID" 2>/dev/null || true
+    open "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility" 2>/dev/null || true
+  else
+    log "Skipping TCC reset (RESET_TCC=0)"
+  fi
+
   if [[ "$RELAUNCH" == "1" ]]; then
     log "Launching VoiceInk from $INSTALL_PATH"
     open "$INSTALL_PATH"
@@ -160,10 +175,8 @@ build_and_install() {
   fi
 
   log "Done. Bundle ID: $APP_BUNDLE_ID"
-  log "If Accessibility breaks after an update, run:"
-  log "  tccutil reset Accessibility $APP_BUNDLE_ID"
-  log "  open \"x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility\""
-  log "  open -a VoiceInk"
+  log "After an update, turn ON Accessibility (and Input Monitoring if listed) for VoiceInk,"
+  log "then quit and reopen the app once if the toggle does not stick."
 }
 
 main() {

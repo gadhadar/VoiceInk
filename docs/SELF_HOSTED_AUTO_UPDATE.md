@@ -146,24 +146,38 @@ Environment knobs:
 | `SKIP_SYNC` | `0` | Skip fetch/merge |
 | `PUSH_ORIGIN` | `1` | Push after merge |
 | `RELAUNCH` | `1` | `open` the app after install |
+| `RESET_TCC` | `1` | Reset Accessibility/related TCC after install |
 | `INSTALL_PATH` | `/Applications/VoiceInk.app` | Install location |
 | `DERIVED_DATA` | `/tmp/VoiceInk-dd` | xcodebuild derived data |
 
 ## Accessibility after updates
 
-Ad-hoc resigning can occasionally confuse macOS privacy bindings. If hotkeys or
-Accessibility stop working after an auto-update:
+Ad-hoc resigning changes the app's code identity, so macOS often drops or
+blocks previous Accessibility grants after each reinstall.
+
+`scripts/auto-update-local.sh` now resets TCC for the VoiceInk bundle ID after
+install (`RESET_TCC=1` by default) and opens **Privacy & Security → Accessibility**.
+
+After each automated update:
+
+1. Turn **ON** VoiceInk under **Accessibility**
+2. Also enable **Microphone** / **Input Monitoring** if prompted
+3. If the toggle does not stick, **quit VoiceInk fully and open it again** from `/Applications` only
+4. Keep a single install path: `/Applications/VoiceInk.app` (no Downloads copy)
+
+Manual recovery (same as `MacBook_Pro_installation.md`):
 
 ```bash
+pkill -x VoiceInk 2>/dev/null || true
 tccutil reset Accessibility com.prakashjoshipax.VoiceInk
+tccutil reset Microphone com.prakashjoshipax.VoiceInk
+tccutil reset ScreenCapture com.prakashjoshipax.VoiceInk
+tccutil reset AppleEvents com.prakashjoshipax.VoiceInk
 open "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
-open -a VoiceInk
+open /Applications/VoiceInk.app
 ```
 
-Then turn **Accessibility** (and Microphone / Input Monitoring as needed) back on.
-
-The workflow does **not** reset TCC automatically, so routine updates do not
-force you to re-click permissions every day.
+Set `RESET_TCC=0` only if you intentionally want to skip the reset.
 
 ## Security notes
 
