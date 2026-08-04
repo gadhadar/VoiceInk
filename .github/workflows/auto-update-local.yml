@@ -5,9 +5,7 @@
 name: Auto-update local VoiceInk
 
 on:
-  schedule:
-    # Once a month on the 1st at 06:30 UTC (~12:00 IST). Manual runs still available anytime.
-    - cron: "30 6 1 * *"
+  # Manual only: review upstream changes first, then run from the Actions tab.
   workflow_dispatch:
     inputs:
       force_build:
