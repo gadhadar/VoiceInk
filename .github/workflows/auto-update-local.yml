@@ -6,8 +6,8 @@ name: Auto-update local VoiceInk
 
 on:
   schedule:
-    # Every day at 06:30 UTC (~12:00 IST). Adjust if you want more frequent checks.
-    - cron: "30 6 * * *"
+    # Once a month on the 1st at 06:30 UTC (~12:00 IST). Manual runs still available anytime.
+    - cron: "30 6 1 * *"
   workflow_dispatch:
     inputs:
       force_build:

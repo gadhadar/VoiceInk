@@ -17,7 +17,7 @@ File: [`.github/workflows/auto-update-local.yml`](../.github/workflows/auto-upda
 
 Script: [`scripts/auto-update-local.sh`](../scripts/auto-update-local.sh)
 
-1. **Trigger** on a daily schedule (`06:30 UTC`) or **Run workflow** manually.
+1. **Trigger** on a monthly schedule (1st of the month, `06:30 UTC`) or **Run workflow** manually.
 2. Fetch/merge **`upstream/main`** into **`main`**.
 3. If there are new commits (or you force a rebuild), push `main` to **origin**.
 4. Build an **ad-hoc local Release** (same recipe as `MacBook_Pro_installation.md`):
