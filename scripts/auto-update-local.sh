@@ -39,6 +39,16 @@ check_host() {
     die "xcode-select must point at full Xcode.app (got: ${dev_dir:-unset}). Run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer"
   fi
 
+  # mlx-swift / Metal shaders need the separate Metal Toolchain component (Xcode 26+).
+  if ! xcrun -f metal >/dev/null 2>&1; then
+    log "Metal toolchain missing; downloading via xcodebuild -downloadComponent MetalToolchain..."
+    xcodebuild -downloadComponent MetalToolchain \
+      || die "Failed to download Metal Toolchain. Run: xcodebuild -downloadComponent MetalToolchain"
+  fi
+  if ! xcrun -f metal >/dev/null 2>&1; then
+    die "metal tool still unavailable after MetalToolchain download"
+  fi
+
   [[ -f "$ROOT_DIR/LocalBuild.xcconfig" ]] \
     || die "LocalBuild.xcconfig missing in repo root"
   [[ -f "$ROOT_DIR/VoiceInk/VoiceInk.local.entitlements" ]] \

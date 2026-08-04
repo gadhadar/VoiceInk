@@ -39,6 +39,7 @@ sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 xcode-select -p
 xcodebuild -version
 make setup   # builds ~/VoiceInk-Dependencies/whisper.cpp if needed
+xcodebuild -downloadComponent MetalToolchain   # required by mlx-swift on Xcode 26+
 ```
 
 Confirm the app recipe once by hand (optional):
@@ -181,6 +182,7 @@ force you to re-click permissions every day.
 | xcode-select points at CLT | `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer` |
 | codesign resource fork errors | Script already uses `/tmp` + `COPYFILE_DISABLE=1` |
 | mlx-swift `CudaBuild` plugin validation fails | Script passes `-skipPackagePluginValidation` / `-skipMacroValidation` |
+| missing `metal` / Metal Toolchain | Script auto-runs `xcodebuild -downloadComponent MetalToolchain` |
 | `git push` rejected | PAT/SSH credentials for the runner user |
 | Merge conflict | Resolve once in a normal clone; next schedule should be clean |
 | App does not appear | Runner must run as a logged-in GUI user, not a headless SSH-only session |
