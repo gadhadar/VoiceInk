@@ -180,6 +180,7 @@ force you to re-click permissions every day.
 | `cmake: command not found` | Homebrew PATH / symlink (above) |
 | xcode-select points at CLT | `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer` |
 | codesign resource fork errors | Script already uses `/tmp` + `COPYFILE_DISABLE=1` |
+| mlx-swift `CudaBuild` plugin validation fails | Script passes `-skipPackagePluginValidation` / `-skipMacroValidation` |
 | `git push` rejected | PAT/SSH credentials for the runner user |
 | Merge conflict | Resolve once in a normal clone; next schedule should be clean |
 | App does not appear | Runner must run as a logged-in GUI user, not a headless SSH-only session |

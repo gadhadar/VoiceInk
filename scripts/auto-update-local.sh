@@ -107,9 +107,13 @@ build_and_install() {
   rm -rf "$DERIVED_DATA"
 
   log "Building local Release (ad-hoc)..."
+  # mlx-swift ships a CUDA build-tool plugin that is irrelevant on Apple Silicon
+  # but still fails SPM plugin fingerprint validation in non-interactive CI.
   xcodebuild -project VoiceInk.xcodeproj -scheme VoiceInk -configuration Release \
     -derivedDataPath "$DERIVED_DATA" \
     -xcconfig LocalBuild.xcconfig \
+    -skipPackagePluginValidation \
+    -skipMacroValidation \
     CODE_SIGN_IDENTITY="-" \
     CODE_SIGNING_REQUIRED=NO \
     CODE_SIGNING_ALLOWED=YES \
