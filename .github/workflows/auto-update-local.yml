@@ -1,0 +1,119 @@
+# Keep this Mac's VoiceInk install current with upstream Beingpax/VoiceInk.
+#
+# Runs ONLY on a self-hosted macOS runner on your machine (not GitHub-hosted).
+# See docs/SELF_HOSTED_AUTO_UPDATE.md for runner setup.
+name: Auto-update local VoiceInk
+
+on:
+  schedule:
+    # Every day at 06:30 UTC (~12:00 IST). Adjust if you want more frequent checks.
+    - cron: "30 6 * * *"
+  workflow_dispatch:
+    inputs:
+      force_build:
+        description: "Rebuild and reinstall even if upstream has no new commits"
+        required: false
+        default: false
+        type: boolean
+      skip_sync:
+        description: "Skip git fetch/merge; only build current checkout and install"
+        required: false
+        default: false
+        type: boolean
+      push_origin:
+        description: "Push merged main back to origin after upstream merge"
+        required: false
+        default: true
+        type: boolean
+
+concurrency:
+  group: voiceink-local-auto-update
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  update-install-relaunch:
+    name: Sync, build, install, relaunch
+    runs-on: [self-hosted, macOS, voiceink]
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Full history so merges against upstream work reliably.
+          fetch-depth: 0
+          # Needed so the job can push merged main back to origin.
+          persist-credentials: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Ensure upstream remote
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! git remote get-url upstream >/dev/null 2>&1; then
+            git remote add upstream https://github.com/Beingpax/VoiceInk.git
+          else
+            git remote set-url upstream https://github.com/Beingpax/VoiceInk.git
+          fi
+          git remote -v
+
+      - name: Configure git identity for merge commits
+        shell: bash
+        run: |
+          git config user.name "VoiceInk Auto-Update"
+          git config user.email "voiceink-auto-update@users.noreply.github.com"
+
+      - name: Host prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          # LaunchAgent runners often miss Homebrew on PATH.
+          if [[ -d /opt/homebrew/bin ]]; then
+            echo "/opt/homebrew/bin" >> "$GITHUB_PATH"
+            export PATH="/opt/homebrew/bin:$PATH"
+          elif [[ -d /usr/local/bin ]]; then
+            echo "/usr/local/bin" >> "$GITHUB_PATH"
+            export PATH="/usr/local/bin:$PATH"
+          fi
+          echo "PATH=$PATH"
+          command -v cmake
+          command -v xcodebuild
+          command -v make
+          xcode-select -p
+          xcodebuild -version
+          cmake --version | head -1
+
+      - name: Sync upstream, build Release local, install, relaunch
+        shell: bash
+        env:
+          FORCE_BUILD: ${{ github.event_name == 'workflow_dispatch' && inputs.force_build == true && '1' || '0' }}
+          SKIP_SYNC: ${{ github.event_name == 'workflow_dispatch' && inputs.skip_sync == true && '1' || '0' }}
+          PUSH_ORIGIN: ${{ github.event_name != 'workflow_dispatch' && '1' || (inputs.push_origin == true && '1' || '0') }}
+          RELAUNCH: "1"
+        run: |
+          set -euo pipefail
+          if [[ -d /opt/homebrew/bin ]]; then
+            export PATH="/opt/homebrew/bin:$PATH"
+          fi
+          chmod +x scripts/auto-update-local.sh
+          # actions/checkout may leave detached HEAD; script expects a branch.
+          git checkout -B main "origin/main" 2>/dev/null || git checkout -B main
+          ./scripts/auto-update-local.sh
+
+      - name: Verify installed app
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="/Applications/VoiceInk.app"
+          if [[ ! -d "$APP" ]]; then
+            echo "No app at $APP (job may have exited early with no upstream changes and no prior install)."
+            exit 0
+          fi
+          test -x "$APP/Contents/MacOS/VoiceInk"
+          /usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$APP/Contents/Info.plist"
+          codesign -dv --verbose=2 "$APP" 2>&1 | head -20
+          file "$APP/Contents/MacOS/VoiceInk"
