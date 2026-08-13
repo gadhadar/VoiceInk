@@ -68,7 +68,7 @@ enum AIProvider: String, CaseIterable {
         case .anthropic:
             return "claude-sonnet-5"
         case .openAI:
-            return "gpt-5.5"
+            return "gpt-5.6-luna"
         case .mistral:
             return "mistral-medium-3-5"
         case .elevenLabs:
@@ -527,7 +527,9 @@ class AIService: ObservableObject {
         case .assemblyAI:
             result = await AssemblyAIClient.verifyAPIKey(key)
         case .openRouter:
-            result = await OpenRouterClient.verifyAPIKey(key, model: verificationModel)
+            result = await OpenRouterClient.verifyAPIKey(key)
+        case .openAI:
+            result = await OpenAILLMClient.verifyAPIKey(key)
         case .gemini:
             result = await GeminiLLMClient.verifyAPIKey(key)
         default:
