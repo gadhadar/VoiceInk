@@ -189,7 +189,7 @@ final class LocalUpdateService: ObservableObject {
         // If the log stops on a non-terminal phase and launchd no longer has the
         // job, the run is over — resolve it, otherwise `isRunning` would latch
         // on forever and block every future update.
-        if restored.isTerminal || isJobLoaded {
+        if restored.isTerminal || isJobRunning {
             phase = restored
             startedAt = modified
         } else {
@@ -200,8 +200,16 @@ final class LocalUpdateService: ObservableObject {
         }
     }
 
-    private var isJobLoaded: Bool {
-        Self.runLaunchctl(["print", "gui/\(getuid())/\(Self.jobLabel)"]).status == 0
+    /// A finished job stays *loaded* and `launchctl print` still exits 0, so
+    /// exit status alone reports a completed build as running. Read the actual
+    /// run state instead — and compare whole lines, since the idle value is
+    /// "not running", which contains "running" as a substring.
+    private var isJobRunning: Bool {
+        let result = Self.runLaunchctl(["print", "gui/\(getuid())/\(Self.jobLabel)"])
+        guard result.status == 0 else { return false }
+        return result.output
+            .components(separatedBy: "\n")
+            .contains { $0.trimmingCharacters(in: .whitespaces) == "state = running" }
     }
 
     /// Reopen the progress window after the rebuild relaunched the app, so a
@@ -335,6 +343,9 @@ final class LocalUpdateService: ObservableObject {
 
         if phase.isTerminal {
             cancelPolling()
+            // A finished job stays loaded otherwise; clear it so the domain is
+            // not left holding a spent job between updates.
+            _ = Self.runLaunchctl(["bootout", "gui/\(getuid())/\(Self.jobLabel)"])
         }
     }
 
