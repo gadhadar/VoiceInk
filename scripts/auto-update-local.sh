@@ -20,7 +20,13 @@ RELAUNCH="${RELAUNCH:-1}"
 RESET_TCC="${RESET_TCC:-1}"
 
 log() { printf '[auto-update] %s\n' "$*"; }
+# Machine-readable progress markers consumed by the in-app update window.
+phase() { printf '[auto-update][phase] %s\n' "$1"; }
 die() { printf '[auto-update] ERROR: %s\n' "$*" >&2; exit 1; }
+# EXIT (not ERR): ERR is not inherited by functions without `set -E`, and every
+# failure path here is inside one. Any non-zero exit reports a failed phase.
+on_exit() { local rc=$?; if [[ $rc -ne 0 ]]; then phase failed; fi; }
+trap on_exit EXIT
 
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "'$1' is required but not found"
@@ -60,6 +66,7 @@ sync_upstream() {
   git remote get-url "$UPSTREAM_REMOTE" >/dev/null 2>&1 \
     || die "git remote '$UPSTREAM_REMOTE' is not configured"
 
+  phase fetching
   log "Fetching $UPSTREAM_REMOTE and $ORIGIN_REMOTE..."
   git fetch "$UPSTREAM_REMOTE" --prune
   git fetch "$ORIGIN_REMOTE" --prune || true
@@ -80,6 +87,7 @@ sync_upstream() {
 
   local before after
   before="$(git rev-parse HEAD)"
+  phase merging
   log "Merging $UPSTREAM_REMOTE/$UPSTREAM_BRANCH into $ORIGIN_BRANCH"
   if ! git merge --no-edit "$UPSTREAM_REMOTE/$UPSTREAM_BRANCH"; then
     die "Merge from $UPSTREAM_REMOTE/$UPSTREAM_BRANCH failed; resolve conflicts manually"
@@ -87,6 +95,7 @@ sync_upstream() {
   after="$(git rev-parse HEAD)"
 
   if [[ "$before" == "$after" && "$FORCE_BUILD" != "1" ]]; then
+    phase uptodate
     log "Already up to date with $UPSTREAM_REMOTE/$UPSTREAM_BRANCH (HEAD=$after); nothing to build"
     exit 0
   fi
@@ -107,16 +116,14 @@ sync_upstream() {
 build_and_install() {
   export COPYFILE_DISABLE=1
 
+  phase preparing
   log "Ensuring whisper.xcframework is available..."
   make setup
-
-  log "Quitting VoiceInk if running..."
-  pkill -x VoiceInk 2>/dev/null || true
-  sleep 1
 
   log "Cleaning derived data at $DERIVED_DATA"
   rm -rf "$DERIVED_DATA"
 
+  phase building
   log "Building local Release (ad-hoc)..."
   # mlx-swift ships a CUDA build-tool plugin that is irrelevant on Apple Silicon
   # but still fails SPM plugin fingerprint validation in non-interactive CI.
@@ -138,6 +145,13 @@ build_and_install() {
 
   log "Stripping xattrs from build product"
   xattr -cr "$app_src"
+
+  # Quit as late as possible: the app only blocks the bundle swap, not the build.
+  # Keeps VoiceInk (and its update progress window) alive for the whole build.
+  phase installing
+  log "Quitting VoiceInk if running..."
+  pkill -x VoiceInk 2>/dev/null || true
+  sleep 1
 
   log "Installing to $INSTALL_PATH"
   rm -rf "$INSTALL_PATH"
@@ -168,12 +182,14 @@ build_and_install() {
   fi
 
   if [[ "$RELAUNCH" == "1" ]]; then
+    phase relaunching
     log "Launching VoiceInk from $INSTALL_PATH"
     open "$INSTALL_PATH"
   else
     log "Skipping relaunch (RELAUNCH=0)"
   fi
 
+  phase done
   log "Done. Bundle ID: $APP_BUNDLE_ID"
   log "After an update, turn ON Accessibility (and Input Monitoring if listed) for VoiceInk,"
   log "then quit and reopen the app once if the toggle does not stick."

@@ -252,6 +252,16 @@ struct SettingsView: View {
                         set: { updaterViewModel.setChecksForUpdatesWhenDashboardAppears($0) }
                     ))
 
+                #if LOCAL_BUILD
+                Toggle(
+                    "Build Upstream Releases Automatically",
+                    isOn: Binding(
+                        get: { LocalUpdateService.shared.automaticallyBuildUpstreamReleases },
+                        set: { LocalUpdateService.shared.automaticallyBuildUpstreamReleases = $0 }
+                    ))
+                .help("When upstream publishes a release, rebuild this fork from source without asking. VoiceInk quits for several minutes during the build.")
+                #endif
+
                 Toggle("Show Announcements", isOn: $enableAnnouncements)
                     .onChange(of: enableAnnouncements) { _, newValue in
                         if newValue {
