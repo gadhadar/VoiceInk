@@ -95,6 +95,9 @@ struct VoiceInkApp: App {
         let aiService = AIService()
         _aiService = StateObject(wrappedValue: aiService)
         aiService.refreshOllamaAvailabilityInBackground()
+        Task { @MainActor in
+            await aiService.fetchOpenRouterModelsIfNeededForMigration()
+        }
 
         let updaterViewModel = UpdaterViewModel()
         _updaterViewModel = StateObject(wrappedValue: updaterViewModel)
@@ -150,7 +153,7 @@ struct VoiceInkApp: App {
 
         let menuBarManager = MenuBarManager()
         _menuBarManager = StateObject(wrappedValue: menuBarManager)
-        menuBarManager.configure(modelContainer: resolvedContainer, engine: engine)
+        menuBarManager.configure(engine: engine)
 
         let activeWindowService = ActiveWindowService.shared
         _activeWindowService = StateObject(wrappedValue: activeWindowService)

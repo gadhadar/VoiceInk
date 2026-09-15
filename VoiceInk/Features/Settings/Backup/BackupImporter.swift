@@ -119,7 +119,7 @@ enum BackupImporter {
             ShortcutStore.setShortcut(cancelShortcut.shortcut, for: .cancelRecorder)
         }
         if let historyShortcut = general.openHistoryWindowShortcut {
-            ShortcutStore.setShortcut(historyShortcut.shortcut, for: .openHistoryWindow)
+            ShortcutStore.setShortcut(historyShortcut.shortcut, for: .openQuickHistory)
         }
         if let dictionaryShortcut = general.quickAddToDictionaryShortcut {
             ShortcutStore.setShortcut(dictionaryShortcut.shortcut, for: .quickAddToDictionary)
@@ -144,12 +144,6 @@ enum BackupImporter {
             let secondaryMode = RecordingShortcutManager.Mode(rawValue: secondaryModeRawValue)
         {
             recordingShortcutManager.secondaryRecordingShortcutMode = secondaryMode
-        }
-        if let middleClickEnabled = general.isMiddleClickToggleEnabled {
-            recordingShortcutManager.isMiddleClickToggleEnabled = middleClickEnabled
-        }
-        if let middleClickDelay = general.middleClickActivationDelay {
-            recordingShortcutManager.middleClickActivationDelay = middleClickDelay
         }
         if let launch = general.launchAtLoginEnabled {
             LaunchAtLoginManager.shared.setEnabled(launch)
