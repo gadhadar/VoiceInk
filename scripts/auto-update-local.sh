@@ -18,6 +18,9 @@ FORCE_BUILD="${FORCE_BUILD:-0}"
 PUSH_ORIGIN="${PUSH_ORIGIN:-1}"
 RELAUNCH="${RELAUNCH:-1}"
 RESET_TCC="${RESET_TCC:-1}"
+# Commit of the last build that was successfully installed. Lets a run that
+# merged but failed to build be retried instead of reporting "up to date".
+STAMP_FILE="${STAMP_FILE:-$HOME/Library/Logs/VoiceInk/last-installed-commit}"
 
 log() { printf '[auto-update] %s\n' "$*"; }
 # Machine-readable progress markers consumed by the in-app update window.
@@ -47,12 +50,14 @@ check_host() {
   fi
 
   # mlx-swift / Metal shaders need the separate Metal Toolchain component (Xcode 26+).
-  if ! xcrun -f metal >/dev/null 2>&1; then
+  # `xcrun -f metal` finds a stub even when the component is missing (e.g. after
+  # an Xcode update), so actually execute it.
+  if ! xcrun metal --version >/dev/null 2>&1; then
     log "Metal toolchain missing; downloading via xcodebuild -downloadComponent MetalToolchain..."
     xcodebuild -downloadComponent MetalToolchain \
       || die "Failed to download Metal Toolchain. Run: xcodebuild -downloadComponent MetalToolchain"
   fi
-  if ! xcrun -f metal >/dev/null 2>&1; then
+  if ! xcrun metal --version >/dev/null 2>&1; then
     die "metal tool still unavailable after MetalToolchain download"
   fi
 
@@ -71,6 +76,13 @@ sync_upstream() {
   git fetch "$UPSTREAM_REMOTE" --prune
   git fetch "$ORIGIN_REMOTE" --prune || true
 
+  # A merge left half-done (by a crash or an older version of this script)
+  # makes every later merge fail; start from a clean HEAD instead.
+  if git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1; then
+    log "Aborting an unfinished merge left from a previous run"
+    git merge --abort
+  fi
+
   local current_branch
   current_branch="$(git rev-parse --abbrev-ref HEAD)"
   if [[ "$current_branch" != "$ORIGIN_BRANCH" ]]; then
@@ -85,32 +97,49 @@ sync_upstream() {
     fi
   fi
 
-  local before after
+  local before after installed
   before="$(git rev-parse HEAD)"
   phase merging
   log "Merging $UPSTREAM_REMOTE/$UPSTREAM_BRANCH into $ORIGIN_BRANCH"
   if ! git merge --no-edit "$UPSTREAM_REMOTE/$UPSTREAM_BRANCH"; then
-    die "Merge from $UPSTREAM_REMOTE/$UPSTREAM_BRANCH failed; resolve conflicts manually"
+    git diff --name-only --diff-filter=U | sed 's/^/[auto-update]   conflict: /' || true
+    git merge --abort || true
+    die "Merge from $UPSTREAM_REMOTE/$UPSTREAM_BRANCH conflicts with fork changes (merge aborted, repo left clean); resolve manually in $ROOT_DIR"
   fi
   after="$(git rev-parse HEAD)"
+  installed="$(cat "$STAMP_FILE" 2>/dev/null || true)"
 
-  if [[ "$before" == "$after" && "$FORCE_BUILD" != "1" ]]; then
+  if [[ "$before" != "$after" ]]; then
+    log "Updated $before -> $after"
+  fi
+
+  if [[ "$after" == "$installed" && "$FORCE_BUILD" != "1" ]]; then
     phase uptodate
     log "Already up to date with $UPSTREAM_REMOTE/$UPSTREAM_BRANCH (HEAD=$after); nothing to build"
     exit 0
   fi
 
-  if [[ "$before" == "$after" ]]; then
+  if [[ "$after" == "$installed" ]]; then
     log "No upstream changes, but FORCE_BUILD=1 — rebuilding anyway"
-  else
-    log "Updated $before -> $after"
-    if [[ "$PUSH_ORIGIN" == "1" ]]; then
-      log "Pushing $ORIGIN_BRANCH to $ORIGIN_REMOTE"
-      git push "$ORIGIN_REMOTE" "$ORIGIN_BRANCH"
-    else
-      log "Skipping push to origin (PUSH_ORIGIN=0)"
-    fi
+  elif [[ "$before" == "$after" ]]; then
+    log "HEAD $after is not the installed build (${installed:-none recorded}); building"
   fi
+}
+
+push_origin() {
+  [[ "$SKIP_SYNC" == "1" ]] && return 0
+  if [[ "$PUSH_ORIGIN" != "1" ]]; then
+    log "Skipping push to origin (PUSH_ORIGIN=0)"
+    return 0
+  fi
+  if git rev-parse --verify "$ORIGIN_REMOTE/$ORIGIN_BRANCH" >/dev/null 2>&1 \
+     && git merge-base --is-ancestor HEAD "$ORIGIN_REMOTE/$ORIGIN_BRANCH"; then
+    return 0
+  fi
+  # Pushed only after a successful build, so origin never gets a merge that
+  # does not compile. A push failure must not mark the installed build failed.
+  log "Pushing $ORIGIN_BRANCH to $ORIGIN_REMOTE"
+  git push "$ORIGIN_REMOTE" "$ORIGIN_BRANCH" || log "WARNING: push to $ORIGIN_REMOTE failed; will retry next run"
 }
 
 build_and_install() {
@@ -164,6 +193,9 @@ build_and_install() {
     --entitlements "$ROOT_DIR/VoiceInk/VoiceInk.local.entitlements" \
     "$INSTALL_PATH"
 
+  mkdir -p "$(dirname "$STAMP_FILE")"
+  git rev-parse HEAD > "$STAMP_FILE"
+
   log "Installed app signature:"
   codesign -dv --verbose=2 "$INSTALL_PATH" 2>&1 || true
 
@@ -205,6 +237,7 @@ main() {
   fi
 
   build_and_install
+  push_origin
 }
 
 main "$@"
